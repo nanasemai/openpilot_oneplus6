@@ -41,6 +41,8 @@ if arch == "larch64":
     lenv['CXXFLAGS'].append(f"-DDLSYM_OFFSET={dlsym_offset}")
   if os.path.isfile('/data/pixel3'):
     lenv['CXXFLAGS'].append("-DPIXEL3")
+  elif os.path.isfile('/data/oneplus6'):
+    lenv['CXXFLAGS'].append("-DONEPLUS6")
 else:
   libs += ['pthread']
 

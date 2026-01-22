@@ -41,6 +41,26 @@ const mat3 fcam_intrinsic_matrix =
 const mat3 fcam_intrinsic_matrix_c3 = (mat3){{2648.0, 0.0, 1928.0 / 2,
                                            0.0, 2648.0, 1208.0 / 2,
                                            0.0, 0.0, 1.0}};
+#elif ONEPLUS6
+#if 0
+// 4032x3024
+const mat3 fcam_intrinsic_matrix =
+  (mat3){{3436.6, 0.0, 1948.7,
+           0.0, 3445.6, 1488.9,
+           0.0, 0.0, 1.0}};
+#else
+// 2328x1748
+// OnePlus 6 (IMX519)
+// Focal Length: 4.25mm, Pixel Pitch (Binned): 2.44um
+// 4.25 / 0.00244 = ~1742
+const mat3 fcam_intrinsic_matrix =
+  (mat3){{1742.0, 0.0, 1164.0,
+           0.0, 1742.0, 874.0,
+           0.0, 0.0, 1.0}};
+#endif
+const mat3 fcam_intrinsic_matrix_c3 = (mat3){{2648.0, 0.0, 1928.0 / 2,
+                                           0.0, 2648.0, 1208.0 / 2,
+                                           0.0, 0.0, 1.0}};
 #else
 const mat3 fcam_intrinsic_matrix = (mat3){{2648.0, 0.0, 1928.0 / 2,
                                            0.0, 2648.0, 1208.0 / 2,

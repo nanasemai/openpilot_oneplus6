@@ -32,6 +32,7 @@ from system.hardware import HARDWARE
 from selfdrive.manager.process_config import managed_processes
 
 PIXEL3 = os.path.isfile('/data/pixel3')
+ONEPLUS6 = os.path.isfile('/data/oneplus6')
 
 SOFT_DISABLE_TIME = 3  # seconds
 LDW_MIN_SPEED = 31 * CV.MPH_TO_MS
@@ -75,8 +76,8 @@ class Controls:
                                      'carControl', 'carEvents', 'carParams'])
 
     self.camera_packets = ["roadCameraState", "driverCameraState", "wideRoadCameraState"]
-    # Temporarily disable driver cam and wide cam for Pixel 3
-    if PIXEL3:
+    # Temporarily disable driver cam and wide cam for Pixel 3 and OnePlus 6 (single camera mode)
+    if PIXEL3 or ONEPLUS6:
       self.camera_packets = ["roadCameraState"]
 
     self.can_sock = can_sock

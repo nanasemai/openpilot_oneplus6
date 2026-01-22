@@ -131,3 +131,6 @@ int open_v4l_by_name_and_index(const char name[], int index = 0, int flags = O_R
 #ifdef PIXEL3
 int open_cam_dev_by_name(const char name[], int flags = O_RDWR | O_NONBLOCK);
 #endif
+#ifdef ONEPLUS6
+int open_cam_dev_by_name(const char name[], int flags = O_RDWR | O_NONBLOCK);
+#endif

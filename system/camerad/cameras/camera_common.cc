@@ -22,6 +22,8 @@
 #include "CL/cl_ext_qcom.h"
 #ifdef PIXEL3
 #include "system/camerad/cameras/camera_pixel3.h"
+#elif ONEPLUS6
+#include "system/camerad/cameras/camera_qcom2.h"
 #else  //PIXEL3
 #include "system/camerad/cameras/camera_qcom2.h"
 #endif //PIXEL3
@@ -45,6 +47,8 @@ public:
              b->rgb_width, b->rgb_height, b->rgb_stride, buf_width, uv_offset,
              s->camera_num, s->camera_num==1 ? " -DVIGNETTING" : "");
 #ifdef PIXEL3
+    const char *cl_file = "cameras/debayer10_to_yuv.cl";
+#elif ONEPLUS6
     const char *cl_file = "cameras/debayer10_to_yuv.cl";
 #else
     const char *cl_file = "cameras/real_debayer.cl";
@@ -396,6 +400,18 @@ int open_v4l_by_name_and_index(const char name[], int index, int flags) {
   }
 }
 #ifdef PIXEL3
+int open_cam_dev_by_name(const char name[], int flags) {
+  for(int i = 0 ;i < 64;i++) {
+    std::string v4l_name = util::read_file(util::string_format("/sys/class/video4linux/video%d/name", i));
+    if (v4l_name.empty()) continue;
+    if (v4l_name.find(name) == 0) {
+      return HANDLE_EINTR(open(util::string_format("/dev/video%d", i).c_str(), flags));
+    }
+  }
+  return -1;
+}
+#endif
+#ifdef ONEPLUS6
 int open_cam_dev_by_name(const char name[], int flags) {
   for(int i = 0 ;i < 64;i++) {
     std::string v4l_name = util::read_file(util::string_format("/sys/class/video4linux/video%d/name", i));

@@ -37,6 +37,10 @@ mat3 update_calibration(Eigen::Matrix<float, 3, 4> &extrinsics, bool wide_camera
   Eigen::Matrix<float, 3, 3, Eigen::RowMajor> m_c3(fcam_intrinsic_matrix_c3.v);
   Eigen::Matrix<float, 3, 3, Eigen::RowMajor> m(fcam_intrinsic_matrix.v);
   const auto cam_intrinsics =  (m_c3 * m.inverse()).inverse() * m_c3;
+#elif ONEPLUS6
+  Eigen::Matrix<float, 3, 3, Eigen::RowMajor> m_c3(fcam_intrinsic_matrix_c3.v);
+  Eigen::Matrix<float, 3, 3, Eigen::RowMajor> m(fcam_intrinsic_matrix.v);
+  const auto cam_intrinsics =  (m_c3 * m.inverse()).inverse() * m_c3;
 #else
   const auto cam_intrinsics = Eigen::Matrix<float, 3, 3, Eigen::RowMajor>(wide_camera ? ecam_intrinsic_matrix.v : fcam_intrinsic_matrix.v);
 #eendif
@@ -178,6 +182,9 @@ int main(int argc, char **argv) {
   }
 
 #ifdef PIXEL3
+  bool main_wide_camera = false;
+  bool use_extra_client = false;
+#elif ONEPLUS6
   bool main_wide_camera = false;
   bool use_extra_client = false;
 #else

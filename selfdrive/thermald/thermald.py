@@ -25,7 +25,8 @@ from selfdrive.thermald.power_monitoring import PowerMonitoring
 from selfdrive.thermald.fan_controller import TiciFanController
 from system.version import terms_version, training_version
 
-PIXEL3 = os.path.isfile('/data/pxiel3')
+PIXEL3 = os.path.isfile('/data/pixel3')
+ONEPLUS6 = os.path.isfile('/data/oneplus6')
 
 ThermalStatus = log.DeviceState.ThermalStatus
 NetworkType = log.DeviceState.NetworkType
@@ -299,15 +300,16 @@ def thermald_thread(end_event, hw_queue):
         if not Path("/data/media").is_mount():
           set_offroad_alert_if_changed("Offroad_StorageMissing", True)
         else:
-          # check for bad NVMe
-          try:
-            with open("/sys/block/nvme0n1/device/model") as f:
-              model = f.read().strip()
-            if not model.startswith("Samsung SSD 980") and params.get("Offroad_BadNvme") is None:
-              set_offroad_alert_if_changed("Offroad_BadNvme", True)
-              cloudlog.event("Unsupported NVMe", model=model, error=True)
-          except Exception:
-            pass
+          # check for bad NVMe, ignore on Pixel 3 and OnePlus 6 devices (no NVMe storage)
+          if not PIXEL3 and not ONEPLUS6:
+            try:
+              with open("/sys/block/nvme0n1/device/model") as f:
+                model = f.read().strip()
+              if not model.startswith("Samsung SSD 980") and params.get("Offroad_BadNvme") is None:
+                set_offroad_alert_if_changed("Offroad_BadNvme", True)
+                cloudlog.event("Unsupported NVMe", model=model, error=True)
+            except Exception:
+              pass
 
     # Handle offroad/onroad transition
     should_start = all(onroad_conditions.values())

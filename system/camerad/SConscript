@@ -15,6 +15,11 @@ if arch == "larch64":
     if not os.path.isfile('/data/enable_yuv'):
       env.Append(CXXFLAGS = '-DUSE_RAW10')
       env.Append(CFLAGS = '-DUSE_RAW10')
+  elif os.path.isfile('/data/oneplus6'):
+    cameras = ['cameras/camera_qcom2.cc']
+    env = env.Clone()
+    env.Append(CXXFLAGS = '-DONEPLUS6')
+    env.Append(CFLAGS = '-DONEPLUS6')
 
   env.Program('camerad', [
       'main.cc',

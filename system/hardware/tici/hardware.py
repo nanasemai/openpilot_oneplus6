@@ -15,6 +15,7 @@ from system.hardware.tici.pins import GPIO
 from system.hardware.tici.amplifier import Amplifier
 
 PIXEL3 = os.path.isfile('/data/pixel3')
+ONEPLUS6 = os.path.isfile('/data/oneplus6')
 ENCHILADA = os.path.isfile('/AGNOS') and not os.path.isfile('/TICI')
 
 NM = 'org.freedesktop.NetworkManager'
@@ -382,6 +383,14 @@ class Tici(HardwareBase):
                          bat=(None, 1),
                          ambient=("xo-therm-adc", 1000),
                          pmic=(("pm8998_tz", "pm8005_tz"), 1000))
+    elif ONEPLUS6:
+      return ThermalConfig(cpu=(["cpu%d-silver-usr" % i for i in range(4)] +
+                              ["cpu%d-gold-usr" % i for i in range(4)], 1000),
+                         gpu=(("gpu0-usr", "gpu1-usr"), 1000),
+                         mem=("ddr-usr", 1000),
+                         bat=(None, 1),
+                         ambient=("tsens_tz_sensor1", 1000),
+                         pmic=(("pm8998_tz", "pm8005_tz"), 1000))
 
     return ThermalConfig(cpu=(["cpu%d-silver-usr" % i for i in range(4)] +
                               ["cpu%d-gold-usr" % i for i in range(4)], 1000),
@@ -407,11 +416,11 @@ class Tici(HardwareBase):
 
   def set_power_save(self, powersave_enabled):
     # TODO: Figure out amplifier for Pixel 3
-    if not PIXEL3 and not ENCHILADA:
-    # amplifier, 100mW at idle
-    self.amplifier.set_global_shutdown(amp_disabled=powersave_enabled)
-    if not powersave_enabled:
-      self.amplifier.initialize_configuration()
+    if not PIXEL3 and not ONEPLUS6 and not ENCHILADA:
+      # amplifier, 100mW at idle
+      self.amplifier.set_global_shutdown(amp_disabled=powersave_enabled)
+      if not powersave_enabled:
+        self.amplifier.initialize_configuration()
 
     # *** CPU config ***
 

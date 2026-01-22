@@ -1,8 +1,9 @@
 import os
 PIXEL3 = os.path.isfile('/data/pixel3')
+ONEPLUS6 = os.path.isfile('/data/oneplus6')
 
 def gpio_init(pin: int, output: bool) -> None:
-  if PIXEL3:
+  if PIXEL3 or ONEPLUS6:
     return
   try:
     with open(f"/sys/class/gpio/gpio{pin}/direction", 'wb') as f:
@@ -12,7 +13,7 @@ def gpio_init(pin: int, output: bool) -> None:
 
 
 def gpio_set(pin: int, high: bool) -> None:
-  if PIXEL3:
+  if PIXEL3 or ONEPLUS6:
     return
   try:
     with open(f"/sys/class/gpio/gpio{pin}/value", 'wb') as f:
