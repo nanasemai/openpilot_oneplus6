@@ -12,5 +12,7 @@ PC = not TICI
 
 if TICI:
   HARDWARE = cast(HardwareBase, Tici())
+elif AGNOS:
+  HARDWARE = cast(HardwareBase, Tici())
 else:
   HARDWARE = cast(HardwareBase, Pc())

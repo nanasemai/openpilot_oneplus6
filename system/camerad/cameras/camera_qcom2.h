@@ -11,6 +11,8 @@
 
 #define FRAME_BUF_COUNT 4
 
+constexpr int BLUR_DETECTION_HISTORY = 5;
+
 class MemoryManager {
   public:
     void init(int _video0_fd) { video0_fd = _video0_fd; }
@@ -77,6 +79,15 @@ public:
   bool skipped;
   int camera_id;
 
+  float wdr_exposure_ratio;
+  float last_grey_fraction;
+  bool high_contrast_scene;
+  int wdr_transition_counter;
+  float blur_history[BLUR_DETECTION_HISTORY];
+  int blur_history_idx;
+  int focus_recovery_counter;
+  bool focus_recovery_pending;
+
   CameraBuf buf;
   MemoryManager mm;
 
@@ -88,7 +99,8 @@ private:
 
   int sensors_init();
   void sensors_poke(int request_id);
-  void sensors_i2c(struct i2c_random_wr_payload* dat, int len, int op_code, bool data_word);
+  void sensors_i2c(const struct i2c_random_wr_payload* dat, int len, int op_code, bool data_word);
+  void check_and_recover_focus(float grey_frac);
 
   // Register parsing
   std::map<uint16_t, std::pair<int, int>> ar0231_register_lut;

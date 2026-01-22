@@ -25,7 +25,8 @@
 #define CAMERA_ID_AR0231 8
 #define CAMERA_ID_IMX390 9
 #define CAMERA_ID_IMX363 10
-#define CAMERA_ID_MAX 11
+#define CAMERA_ID_IMX519 11
+#define CAMERA_ID_MAX 12
 
 const int YUV_BUFFER_COUNT = 40;
 

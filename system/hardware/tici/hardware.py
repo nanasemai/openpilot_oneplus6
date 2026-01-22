@@ -15,6 +15,7 @@ from system.hardware.tici.pins import GPIO
 from system.hardware.tici.amplifier import Amplifier
 
 PIXEL3 = os.path.isfile('/data/pixel3')
+ENCHILADA = os.path.isfile('/AGNOS') and not os.path.isfile('/TICI')
 
 NM = 'org.freedesktop.NetworkManager'
 NM_CON_ACT = NM + '.Connection.Active'
@@ -90,7 +91,7 @@ class Tici(HardwareBase):
       return f.read().strip()
 
   def get_device_type(self):
-    return "tici"
+    return "enchilada" if ENCHILADA else "tici"
 
   def get_sound_card_online(self):
     return (os.path.isfile('/proc/asound/card0/state') and
@@ -406,7 +407,7 @@ class Tici(HardwareBase):
 
   def set_power_save(self, powersave_enabled):
     # TODO: Figure out amplifier for Pixel 3
-    if not PIXEL3:
+    if not PIXEL3 and not ENCHILADA:
     # amplifier, 100mW at idle
     self.amplifier.set_global_shutdown(amp_disabled=powersave_enabled)
     if not powersave_enabled:
@@ -424,7 +425,7 @@ class Tici(HardwareBase):
       sudo_write(gov, f'/sys/devices/system/cpu/cpufreq/policy{n}/scaling_governor')
 
     # TODO: Figure out amplifier for Pixel 3
-    if not PIXEL3:
+    if not PIXEL3 and not ENCHILADA:
       # *** IRQ config ***
       affine_irq(5, 565)   # kgsl-3d0
       affine_irq(4, 740)   # xhci-hcd:usb1 goes on the boardd core
@@ -440,7 +441,8 @@ class Tici(HardwareBase):
       return 0
 
   def initialize_hardware(self):
-    self.amplifier.initialize_configuration()
+    if not PIXEL3 and not ENCHILADA:
+      self.amplifier.initialize_configuration()
 
     # Allow thermald to write engagement status to kmsg
     os.system("sudo chmod a+w /dev/kmsg")
@@ -521,22 +523,30 @@ class Tici(HardwareBase):
     return r
 
   def reset_internal_panda(self):
-    gpio_init(GPIO.STM_RST_N, True)
+    if ENCHILADA:
+      # OnePlus 6 使用外部 Panda，跳过内置 Panda 控制
+      pass
+    else:
+      gpio_init(GPIO.STM_RST_N, True)
 
-    gpio_set(GPIO.STM_RST_N, 1)
-    time.sleep(2)
-    gpio_set(GPIO.STM_RST_N, 0)
+      gpio_set(GPIO.STM_RST_N, 1)
+      time.sleep(2)
+      gpio_set(GPIO.STM_RST_N, 0)
 
 
   def recover_internal_panda(self):
-    gpio_init(GPIO.STM_RST_N, True)
-    gpio_init(GPIO.STM_BOOT0, True)
+    if ENCHILADA:
+      # OnePlus 6 使用外部 Panda，跳过内置 Panda 控制
+      pass
+    else:
+      gpio_init(GPIO.STM_RST_N, True)
+      gpio_init(GPIO.STM_BOOT0, True)
 
-    gpio_set(GPIO.STM_RST_N, 1)
-    gpio_set(GPIO.STM_BOOT0, 1)
-    time.sleep(2)
-    gpio_set(GPIO.STM_RST_N, 0)
-    gpio_set(GPIO.STM_BOOT0, 0)
+      gpio_set(GPIO.STM_RST_N, 1)
+      gpio_set(GPIO.STM_BOOT0, 1)
+      time.sleep(2)
+      gpio_set(GPIO.STM_RST_N, 0)
+      gpio_set(GPIO.STM_BOOT0, 0)
 
 
 if __name__ == "__main__":

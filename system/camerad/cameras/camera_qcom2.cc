@@ -29,7 +29,11 @@ extern ExitHandler do_exit;
 
 const size_t FRAME_WIDTH = 1928;
 const size_t FRAME_HEIGHT = 1208;
-const size_t FRAME_STRIDE = 2896;  // for 12 bit output. 1928 * 12 / 8 + 4 (alignment)
+const size_t FRAME_STRIDE = 2896;
+
+const size_t IMX519_OUTPUT_WIDTH = 2328;
+const size_t IMX519_OUTPUT_HEIGHT = 1748;
+const size_t IMX519_FRAME_STRIDE = 2910;  // for 12 bit output. 1928 * 12 / 8 + 4 (alignment)
 
 const size_t AR0231_REGISTERS_HEIGHT = 2;
 const size_t AR0231_STATS_HEIGHT = 2;
@@ -52,21 +56,71 @@ CameraInfo cameras_supported[CAMERA_ID_MAX] = {
     .frame_height = FRAME_HEIGHT,
     .frame_stride = FRAME_STRIDE,
   },
+  [CAMERA_ID_IMX519] = {
+    .frame_width = IMX519_OUTPUT_WIDTH,
+    .frame_height = IMX519_OUTPUT_HEIGHT,
+    .frame_stride = IMX519_FRAME_STRIDE,
+  },
 };
 
 const float DC_GAIN = 2.5;
 const float sensor_analog_gains[] = {
-  1.0/8.0, 2.0/8.0, 2.0/7.0, 3.0/7.0, // 0, 1, 2, 3
-  3.0/6.0, 4.0/6.0, 4.0/5.0, 5.0/5.0, // 4, 5, 6, 7
-  5.0/4.0, 6.0/4.0, 6.0/3.0, 7.0/3.0, // 8, 9, 10, 11
-  7.0/2.0, 8.0/2.0, 8.0/1.0};         // 12, 13, 14, 15 = bypass
+  1.0/4.0, 2.0/4.0, 3.0/4.0, 4.0/4.0,
+  5.0/4.0, 6.0/4.0, 7.0/4.0, 8.0/4.0,
+  8.0/3.0, 8.0/2.0, 8.0/1.0, 16.0/1.0,
+};
 
-const int ANALOG_GAIN_MIN_IDX = 0x1; // 0.25x
-const int ANALOG_GAIN_REC_IDX = 0x6; // 0.8x
-const int ANALOG_GAIN_MAX_IDX = 0xD; // 4.0x
+const int ANALOG_GAIN_MIN_IDX = 0x0;
+const int ANALOG_GAIN_REC_IDX = 0x6;
+const int ANALOG_GAIN_MAX_IDX = 0xB;
 
-const int EXPOSURE_TIME_MIN = 2; // with HDR, fastest ss
-const int EXPOSURE_TIME_MAX = 0x0855; // with HDR, slowest ss, 40ms
+const int EXPOSURE_TIME_MIN = 1;
+const int EXPOSURE_TIME_MAX = 0x0FFF;
+
+// IMX519 滚动快门校正参数
+const float IMX519_ROLLING_SHUTTER_TIME = 0.0437f;
+const float IMX519_READOUT_TIME_PER_ROW = 0.000025f;
+
+// IMX519 WDR 曝光策略参数
+const float WDR_EXPOSURE_RATIO = 4.0f;
+const int WDR_TRANSITION_FRAMES = 3;
+const float WDR_SKY_SUPPRESSION = 0.7f;
+const float WDR_ROAD_PRIORITY = 1.3f;
+const float TUNNEL_EXIT_ADAPTATION_TIME = 1.5f;
+
+// IMX519 固定对焦配置（驾驶场景）
+const int FOCUS_POS_INFINITY = 0x3FF;
+const int FOCUS_POS_ROAD = 0x2AA;
+const int FOCUS_BLUR_THRESHOLD = 100;
+const bool AUTOFOCUS_DISABLED = true;
+
+const float IMX519_READOUT_SPEEDUP = 1.15f;
+const int IMX519_LINE_LENGTH_MIN = 0x1000;
+
+const float WB_DAYLIGHT_R_GAIN = 1.8f;
+const float WB_DAYLIGHT_B_GAIN = 1.4f;
+const float WB_DAYLIGHT_G_GAIN = 1.0f;
+const bool WB_AUTO_DISABLED = true;
+
+const float BLUR_DETECTION_THRESHOLD = 0.15f;
+const int FOCUS_RECOVERY_DELAY_MS = 100;
+const int FOCUS_RECOVERY_COUNTER_MAX = 3;
+
+const bool RAW_OUTPUT_ONLY = true;
+const bool ISP_POSTPROC_DISABLED = true;
+
+const int IMX519_FRAME_BUF_COUNT = 3;
+const size_t IMX519_RGB_WIDTH = 2328;
+const size_t IMX519_RGB_HEIGHT = 1748;
+const size_t IMX519_RGB_STRIDE = 2910;
+
+const int IMX519_TARGET_LATENCY_MS = 40;
+const int IMX519_MAX_LATENCY_MS = 50;
+const int IMX519_SYNC_TIMEOUT_MS = 55;
+
+inline uint64_t rolling_shutter_correct_timestamp(uint64_t timestamp_sof, float rolling_shutter_time) {
+  return timestamp_sof + (uint64_t)(rolling_shutter_time * 1e9 / 2);
+}
 
 // ************** low level camera helpers ****************
 int do_cam_control(int fd, int op_code, void *handle, int size) {
@@ -215,6 +269,13 @@ void CameraState::sensors_start() {
     sensors_i2c(start_reg_array_ar0231, std::size(start_reg_array_ar0231), CAM_SENSOR_PACKET_OPCODE_SENSOR_CONFIG, true);
   } else if (camera_id == CAMERA_ID_IMX390) {
     sensors_i2c(start_reg_array_imx390, std::size(start_reg_array_imx390), CAM_SENSOR_PACKET_OPCODE_SENSOR_CONFIG, false);
+  } else if (camera_id == CAMERA_ID_IMX519) {
+    sensors_i2c(start_reg_array_imx519, std::size(start_reg_array_imx519), CAM_SENSOR_PACKET_OPCODE_SENSOR_CONFIG, false);
+    sensors_i2c(init_array_imx519, std::size(init_array_imx519), CAM_SENSOR_PACKET_OPCODE_SENSOR_CONFIG, false);
+    sensors_i2c(fixed_focus_reg_array_imx519, std::size(fixed_focus_reg_array_imx519), CAM_SENSOR_PACKET_OPCODE_SENSOR_CONFIG, false);
+    sensors_i2c(timing_opt_reg_array_imx519, std::size(timing_opt_reg_array_imx519), CAM_SENSOR_PACKET_OPCODE_SENSOR_CONFIG, false);
+    sensors_i2c(wb_daylight_reg_array_imx519, std::size(wb_daylight_reg_array_imx519), CAM_SENSOR_PACKET_OPCODE_SENSOR_CONFIG, false);
+    sensors_i2c(isp_postproc_off_reg_array_imx519, std::size(isp_postproc_off_reg_array_imx519), CAM_SENSOR_PACKET_OPCODE_SENSOR_CONFIG, false);
   } else {
     assert(false);
   }
@@ -240,7 +301,7 @@ void CameraState::sensors_poke(int request_id) {
   mm.free(pkt);
 }
 
-void CameraState::sensors_i2c(struct i2c_random_wr_payload* dat, int len, int op_code, bool data_word) {
+void CameraState::sensors_i2c(const struct i2c_random_wr_payload* dat, int len, int op_code, bool data_word) {
   // LOGD("sensors_i2c: %d", len);
   uint32_t cam_packet_handle = 0;
   int size = sizeof(struct cam_packet)+sizeof(struct cam_cmd_buf_desc)*1;
@@ -299,16 +360,14 @@ int CameraState::sensors_init() {
   probe->camera_id = camera_num;
   switch (camera_num) {
     case 0:
-      // port 0
-      i2c_info->slave_addr = (camera_id == CAMERA_ID_AR0231) ? 0x20 : 0x34;
+      // port 0 - IMX519 (rear main)
+      i2c_info->slave_addr = (camera_id == CAMERA_ID_AR0231) ? 0x20 : ((camera_id == CAMERA_ID_IMX519) ? 0x10 : 0x34);
       break;
     case 1:
-      // port 1
-      i2c_info->slave_addr = (camera_id == CAMERA_ID_AR0231) ? 0x30 : 0x36;
+      i2c_info->slave_addr = (camera_id == CAMERA_ID_AR0231) ? 0x30 : ((camera_id == CAMERA_ID_IMX519) ? 0x10 : 0x36);
       break;
     case 2:
-      // port 2
-      i2c_info->slave_addr = (camera_id == CAMERA_ID_AR0231) ? 0x20 : 0x34;
+      i2c_info->slave_addr = (camera_id == CAMERA_ID_AR0231) ? 0x20 : ((camera_id == CAMERA_ID_IMX519) ? 0x10 : 0x34);
       break;
   }
 
@@ -327,6 +386,9 @@ int CameraState::sensors_init() {
   } else if (camera_id == CAMERA_ID_IMX390) {
     probe->reg_addr = 0x330;
     probe->expected_data = 0x1538;
+  } else if (camera_id == CAMERA_ID_IMX519) {
+    probe->reg_addr = 0x0160;
+    probe->expected_data = 0x0519;
   } else {
     assert(false);
   }
@@ -352,7 +414,7 @@ int CameraState::sensors_init() {
   power->count = 1;
   power->cmd_type = CAMERA_SENSOR_CMD_TYPE_PWR_UP;
   power->power_settings[0].power_seq_type = 0;
-  power->power_settings[0].config_val_low = (camera_id == CAMERA_ID_AR0231) ? 19200000 : 24000000; //Hz
+  power->power_settings[0].config_val_low = (camera_id == CAMERA_ID_AR0231) ? 19200000 : ((camera_id == CAMERA_ID_IMX519) ? 24000000 : 24000000); //Hz
   power = power_set_wait(power, 1);
 
   // reset high
@@ -552,7 +614,8 @@ void CameraState::enqueue_buffer(int i, bool dp) {
     // wait
     struct cam_sync_wait sync_wait = {0};
     sync_wait.sync_obj = sync_objs[i];
-    sync_wait.timeout_ms = 50; // max dt tolerance, typical should be 23
+    // IMX519: 20fps = 50ms per frame, use 55ms timeout for tolerance
+    sync_wait.timeout_ms = (camera_id == CAMERA_ID_IMX519) ? 55 : 50;
     ret = do_cam_control(multi_cam_state->cam_sync_fd, CAM_SYNC_WAIT, &sync_wait, sizeof(sync_wait));
     if (ret != 0) {
       LOGE("failed to wait for sync: %d %d", ret, sync_wait.sync_obj);
@@ -630,7 +693,19 @@ void CameraState::camera_init(MultiCameraState *multi_cam_state_, VisionIpcServe
   exposure_time = 5;
   cur_ev[0] = cur_ev[1] = cur_ev[2] = (dc_gain_enabled ? DC_GAIN : 1) * sensor_analog_gains[gain_idx] * exposure_time;
 
-  buf.init(device_id, ctx, this, v, FRAME_BUF_COUNT, yuv_type);
+  wdr_exposure_ratio = 1.0f;
+  last_grey_fraction = 0.3f;
+  high_contrast_scene = false;
+  wdr_transition_counter = 0;
+  for (int i = 0; i < BLUR_DETECTION_HISTORY; i++) {
+    blur_history[i] = 0.3f;
+  }
+  blur_history_idx = 0;
+  focus_recovery_counter = 0;
+  focus_recovery_pending = false;
+
+  int buf_count = (camera_id == CAMERA_ID_IMX519) ? IMX519_FRAME_BUF_COUNT : FRAME_BUF_COUNT;
+  buf.init(device_id, ctx, this, v, buf_count, yuv_type);
 }
 
 void CameraState::camera_open() {
@@ -648,6 +723,11 @@ void CameraState::camera_open() {
   if (ret != 0) {
     LOGD("AR0231 init failed, trying IMX390");
     camera_id = CAMERA_ID_IMX390;
+    ret = sensors_init();
+  }
+  if (ret != 0) {
+    LOGD("IMX390 init failed, trying IMX519");
+    camera_id = CAMERA_ID_IMX519;
     ret = sensors_init();
   }
   LOGD("-- Probing sensor %d done with %d", camera_num, ret);
@@ -675,6 +755,8 @@ void CameraState::camera_open() {
     sensors_i2c(init_array_ar0231, std::size(init_array_ar0231), CAM_SENSOR_PACKET_OPCODE_SENSOR_CONFIG, true);
   } else if (camera_id == CAMERA_ID_IMX390) {
     sensors_i2c(init_array_imx390, std::size(init_array_imx390), CAM_SENSOR_PACKET_OPCODE_SENSOR_CONFIG, false);
+  } else if (camera_id == CAMERA_ID_IMX519) {
+    sensors_i2c(init_array_imx519, std::size(init_array_imx519), CAM_SENSOR_PACKET_OPCODE_SENSOR_CONFIG, false);
   } else {
     assert(false);
   }
@@ -1042,7 +1124,7 @@ void CameraState::handle_camera_event(void *evdat) {
 
     auto &meta_data = buf.camera_bufs_metadata[buf_idx];
     meta_data.frame_id = main_id - idx_offset;
-    meta_data.timestamp_sof = timestamp;
+    meta_data.timestamp_sof = rolling_shutter_correct_timestamp(timestamp, IMX519_ROLLING_SHUTTER_TIME);
     exp_lock.lock();
     meta_data.gain = dc_gain_enabled ? analog_gain_frac * DC_GAIN : analog_gain_frac;
     meta_data.high_conversion_gain = dc_gain_enabled;
@@ -1088,6 +1170,22 @@ void CameraState::set_camera_exposure(float grey_frac) {
   float desired_ev = std::clamp(cur_ev_ * target_grey / grey_frac, min_ev, max_ev);
   float k = (1.0 - k_ev) / 3.0;
   desired_ev = (k * cur_ev[0]) + (k * cur_ev[1]) + (k * cur_ev[2]) + (k_ev * desired_ev);
+
+  float grey_change = std::abs(grey_frac - last_grey_fraction);
+  high_contrast_scene = grey_change > 0.15f;
+  if (high_contrast_scene) {
+    wdr_transition_counter = WDR_TRANSITION_FRAMES;
+  }
+  if (wdr_transition_counter > 0) {
+    wdr_transition_counter--;
+    float transition_factor = (float)wdr_transition_counter / WDR_TRANSITION_FRAMES;
+    if (grey_frac < 0.15f) {
+      desired_ev *= (1.0f + WDR_EXPOSURE_RATIO * transition_factor * WDR_ROAD_PRIORITY);
+    } else if (grey_frac > 0.35f) {
+      desired_ev *= (1.0f - WDR_SKY_SUPPRESSION * transition_factor);
+    }
+  }
+  last_grey_fraction = grey_frac;
 
   float best_ev_score = 1e6;
   int new_g = 0;
@@ -1149,11 +1247,16 @@ void CameraState::set_camera_exposure(float grey_frac) {
 
   exp_lock.unlock();
 
+  if (camera_id == CAMERA_ID_IMX519) {
+    check_and_recover_focus(grey_frac);
+  }
+
   // Processing a frame takes right about 50ms, so we need to wait a few ms
   // so we don't send i2c commands around the frame start.
   int ms = (nanos_since_boot() - buf.cur_frame_data.timestamp_sof) / 1000000;
-  if (ms < 60) {
-    util::sleep_for(60 - ms);
+  int wait_threshold = (camera_id == CAMERA_ID_IMX519) ? 40 : 60;
+  if (ms < wait_threshold) {
+    util::sleep_for(wait_threshold - ms);
   }
   // LOGE("ae - camera %d, cur_t %.5f, sof %.5f, dt %.5f", camera_num, 1e-9 * nanos_since_boot(), 1e-9 * buf.cur_frame_data.timestamp_sof, 1e-9 * (nanos_since_boot() - buf.cur_frame_data.timestamp_sof));
 
@@ -1176,6 +1279,14 @@ void CameraState::set_camera_exposure(float grey_frac) {
       {0x000c, real_exposure_time&0xFF}, {0x000d, real_exposure_time>>8},
       {0x0010, real_exposure_time&0xFF}, {0x0011, real_exposure_time>>8},
       {0x0018, real_gain&0xFF}, {0x0019, real_gain>>8},
+    };
+    sensors_i2c(exp_reg_array, sizeof(exp_reg_array)/sizeof(struct i2c_random_wr_payload), CAM_SENSOR_PACKET_OPCODE_SENSOR_CONFIG, false);
+  } else if (camera_id == CAMERA_ID_IMX519) {
+    uint16_t exposure_reg = (uint16_t)exposure_time;
+    uint16_t gain_reg = (uint16_t)(gain * 256);
+    struct i2c_random_wr_payload exp_reg_array[] = {
+      {0x0202, exposure_reg&0xFF}, {0x0203, exposure_reg>>8},
+      {0x0224, gain_reg&0xFF}, {0x0225, gain_reg>>8},
     };
     sensors_i2c(exp_reg_array, sizeof(exp_reg_array)/sizeof(struct i2c_random_wr_payload), CAM_SENSOR_PACKET_OPCODE_SENSOR_CONFIG, false);
   }
@@ -1319,5 +1430,33 @@ void cameras_run(MultiCameraState *s) {
   for (auto &t : threads) t.join();
 
   cameras_close(s);
+}
+
+void CameraState::check_and_recover_focus(float grey_frac) {
+  blur_history[blur_history_idx] = grey_frac;
+  blur_history_idx = (blur_history_idx + 1) % BLUR_DETECTION_HISTORY;
+
+  float blur_sum = 0.0f;
+  for (int i = 0; i < BLUR_DETECTION_HISTORY; i++) {
+    blur_sum += blur_history[i];
+  }
+  float blur_avg = blur_sum / BLUR_DETECTION_HISTORY;
+
+  float blur_variance = 0.0f;
+  for (int i = 0; i < BLUR_DETECTION_HISTORY; i++) {
+    float diff = blur_history[i] - blur_avg;
+    blur_variance += diff * diff;
+  }
+  blur_variance /= BLUR_DETECTION_HISTORY;
+
+  if (blur_variance < BLUR_DETECTION_THRESHOLD * BLUR_DETECTION_THRESHOLD) {
+    focus_recovery_counter++;
+    if (focus_recovery_counter >= FOCUS_RECOVERY_COUNTER_MAX) {
+      focus_recovery_pending = true;
+      focus_recovery_counter = 0;
+    }
+  } else {
+    focus_recovery_counter = std::max(0, focus_recovery_counter - 1);
+  }
 }
 
